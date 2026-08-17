@@ -271,7 +271,9 @@ function mergePad(a, b){
 }
 async function pull(){
   try {
-    const r = await fetch("https://raw.githubusercontent.com/armiger-crypto/cross-it-off/main/pad.json?t="+Date.now());
+    const r = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json?t="+Date.now(), {
+      headers: {Accept:"application/vnd.github.raw", "Cache-Control":"no-cache"}
+    });
     if (!r.ok) return load();
     const data = await r.json();
     if (data && typeof data === "object"){
