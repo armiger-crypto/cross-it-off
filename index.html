@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Pad" />
+<meta name="theme-color" content="#1c1b18" />
+<link rel="manifest" href="./manifest.json" />
+<title>Cross it off</title>
+<style>
+  :root {
+    --pad: #f4e37a;
+    --rule: #c5daf0;
+    --margin: #e24b4b;
+    --ink: #1c2430;
+    --faint: #5c6570;
+    --pen: #c41f1f;
+    --desk: #cbb56a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 500px at 50% -8%, #fff4b8, transparent 50%),
+      var(--desk);
+    padding: 28px 16px 56px;
+  }
+  .pad {
+    max-width: 540px;
+    margin: 0 auto;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        #f4e37a 0,
+        #f4e37a 35px,
+        var(--rule) 35px,
+        var(--rule) 36px
+      );
+    border-radius: 2px 10px 10px 2px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.4) inset,
+      10px 20px 44px rgba(70,50,0,.24),
+      0 0 0 1px rgba(120,90,10,.16);
+    position: relative;
+    padding: 20px 26px 32px 62px;
+    min-height: 740px;
+  }
+  .pad::before {
+    content: "";
+    position: absolute;
+    left: 44px; top: 0; bottom: 0; width: 2px;
+    background: var(--margin);
+    opacity: .7;
+  }
+  .holes {
+    position: absolute; left: 13px; top: 78px;
+    display: flex; flex-direction: column; gap: 96px;
+  }
+  .holes i {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--desk);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.3);
+  }
+  .kicker {
+    font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint); margin: 2px 0 0;
+  }
+  h1 { margin: 0; font-size: 34px; letter-spacing: -.03em; line-height: 1.05; }
+  .meta {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    margin: 8px 0 4px; color: var(--faint); font-size: 14px;
+  }
+  .streak {
+    background: var(--ink); color: var(--pad);
+    border-radius: 999px; padding: 3px 10px; font-weight: 700; font-size: 13px;
+  }
+  .week {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 6px; margin: 12px 0 8px;
+  }
+  .wd { text-align: center; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+  .wd b {
+    display: flex; align-items: center; justify-content: center;
+    height: 36px; margin-top: 4px;
+    background: rgba(255,255,255,.38);
+    border-radius: 8px; font-size: 18px; color: var(--ink); font-weight: 750;
+  }
+  .wd.today b { outline: 2px solid var(--ink); }
+  .wd.done b { color: var(--pen); }
+  .list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .item {
+    display: grid; grid-template-columns: 36px 1fr;
+    gap: 12px; align-items: start;
+    min-height: 72px; padding: 10px 0 8px;
+    cursor: pointer; user-select: none;
+    border: 0; background: transparent; width: 100%;
+    text-align: left; font: inherit; color: inherit;
+  }
+  .item:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .box {
+    width: 32px; height: 32px; margin-top: 6px;
+    border: 2.5px solid var(--ink); border-radius: 5px;
+    background: rgba(255,253,244,.6);
+    position: relative;
+  }
+  .box .x {
+    position: absolute; inset: -6px 0 0 0;
+    font: 800 34px/32px Georgia, "Times New Roman", serif;
+    color: var(--pen);
+    text-align: center;
+    transform: scale(.15) rotate(-18deg);
+    opacity: 0;
+  }
+  .item.on .box .x {
+    opacity: 1;
+    transform: scale(1) rotate(-10deg);
+    transition: transform .2s cubic-bezier(.2,1.7,.3,1), opacity .1s;
+  }
+  .name {
+    font-size: 23px; font-weight: 750; letter-spacing: -.02em;
+    position: relative; display: inline-block;
+  }
+  .name::after {
+    content: "";
+    position: absolute; left: -3%; top: 55%;
+    width: 0; height: 3px; background: var(--pen);
+    border-radius: 2px; transform: rotate(-1.5deg);
+  }
+  .item.on .name { color: #3d4450; }
+  .item.on .name::after {
+    width: 106%;
+    transition: width .28s ease;
+  }
+  .hint { display: block; color: var(--faint); font-size: 13px; margin-top: 3px; }
+  .item.off-day { cursor: default; opacity: .72; }
+  .item.off-day .box { border-style: dashed; }
+  .add {
+    display: flex; gap: 8px; margin-top: 8px; padding-top: 6px;
+  }
+  .add input {
+    flex: 1; border: 0; background: transparent;
+    border-bottom: 2px solid rgba(28,36,48,.25);
+    font: inherit; font-size: 16px; padding: 8px 2px;
+    color: var(--ink);
+  }
+  .add input:focus { outline: none; border-bottom-color: var(--ink); }
+  .add button {
+    border: 2px solid var(--ink); background: transparent;
+    border-radius: 999px; padding: 6px 12px; font: inherit;
+    font-weight: 700; cursor: pointer;
+  }
+  .toast {
+    min-height: 28px; margin: 8px 0 0;
+    font-weight: 750; color: var(--pen); font-size: 18px;
+  }
+  .log h2 {
+    margin: 22px 0 6px; font-size: 13px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+  }
+  .log ul { list-style: none; margin: 0; padding: 0; }
+  .log li {
+    font-size: 15px; padding: 5px 0;
+    color: #3d4450;
+    text-decoration: line-through;
+    text-decoration-color: var(--pen);
+    text-decoration-thickness: 2px;
+  }
+  .empty { color: var(--faint); font-size: 14px; }
+  canvas#confetti {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+  }
+  .foot {
+    max-width: 540px; margin: 14px auto 0;
+    color: #5a4a20; font-size: 13px; text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<div class="pad">
+  <div class="holes"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="kicker">Michael's pad</div>
+  <h1 id="todayTitle">Today</h1>
+  <div class="meta">
+    <span class="streak" id="streak">streak 0</span>
+    <span id="needLine"></span>
+  </div>
+  <div class="week" id="week"></div>
+  <div class="list" id="list"></div>
+  <form class="add" id="addForm">
+    <input id="addInput" maxlength="60" placeholder="Add a line, then cross it off" />
+    <button type="submit">Add</button>
+  </form>
+  <div class="toast" id="toast"></div>
+  <div class="log">
+    <h2>Already crossed off</h2>
+    <ul id="log"></ul>
+  </div>
+</div>
+<p class="foot">Treadmill starts Aug 17. REG Mon / Wed / Thu. Share from your phone: Add to Home Screen.</p>
+<script>
+const TZ = "America/Chicago";
+const KEY = "michael-cross-it-off-v1";
+const REG_DAYS = new Set([1, 3, 4]); // Mon Wed Thu
+const TREAD_START = "2026-08-17";
+const REPO = "armiger-crypto/cross-it-off";
+function chicagoHour(){
+  const parts = new Intl.DateTimeFormat("en-US",{timeZone:TZ,hour:"numeric",hourCycle:"h23"}).formatToParts(new Date());
+  return +parts.find(p => p.type==="hour").value;
+}
+function windDown(){ return chicagoHour() >= 20; }
+function isTreadDayKey(key){ return key >= TREAD_START; }
+
+const fmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ, weekday: "long", month: "long", day: "numeric"
+});
+const keyFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"
+});
+const dowFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" });
+const dayNumFmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, day: "numeric" });
+
+function nowParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, year: "numeric", month: "numeric", day: "numeric", weekday: "short"
+  }).formatToParts(new Date());
+  const get = t => parts.find(p => p.type === t).value;
+  const weekdays = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+  return {
+    y: +get("year"), m: +get("month"), d: +get("day"),
+    dow: weekdays[get("weekday")]
+  };
+}
+function todayKey() { return keyFmt.format(new Date()); }
+function dateFromKey(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 17, 0, 0));
+}
+function addDays(key, n) {
+  const dt = dateFromKey(key);
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return keyFmt.format(dt);
+}
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY) || "{}"); }
+  catch { return {}; }
+}
+function save(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
+async function pull() {
+  try {
+    const r = await fetch("https://raw.githubusercontent.com/"+REPO+"/main/pad.json?t="+Date.now());
+    if (!r.ok) return load();
+    const data = await r.json();
+    if (data && typeof data === "object") {
+      const local = load();
+      const merged = Object.assign({}, data, local);
+      for (const k of Object.keys(data)) {
+        merged[k] = Object.assign({}, data[k]||{}, local[k]||{});
+        if ((data[k]||{}).extra || (local[k]||{}).extra) {
+          merged[k].extra = (local[k]&&local[k].extra&&local[k].extra.length) ? local[k].extra : (data[k].extra||[]);
+        }
+      }
+      localStorage.setItem(KEY, JSON.stringify(merged));
+      return merged;
+    }
+  } catch (e) {}
+  return load();
+}
+
+function isRegDay(key) {
+  const dt = dateFromKey(key);
+  const dow = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short" }).format(dt);
+  const map = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+  return REG_DAYS.has(map[dow]);
+}
+function padRequired(key){
+  const r=[];
+  if(isTreadDayKey(key)) r.push("tread");
+  if(isRegDay(key)) r.push("reg");
+  return r;
+}
+
+function required(day, key) {
+  const need = ["tread"];
+  if (isRegDay(key)) need.push("reg");
+  return need;
+}
+function complete(day, key) {
+  const req = padRequired(key);
+  if (!req.length || !day) return false;
+  return req.every(id => id === "tread" ? !!day.tread : !!day.reg);
+}
+
+function streak(db, today) {
+  let n = 0;
+  let k = complete(db[today], today) ? today : addDays(today, -1);
+  while (db[k] && complete(db[k], k)) {
+    n += 1;
+    k = addDays(k, -1);
+  }
+  return n;
+}
+
+function tick() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "square";
+    o.frequency.value = 180;
+    g.gain.value = 0.04;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    o.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1);
+    o.stop(ctx.currentTime + 0.11);
+  } catch {}
+}
+
+function burst() {
+  const c = document.getElementById("confetti");
+  const ctx = c.getContext("2d");
+  c.width = innerWidth; c.height = innerHeight;
+  const bits = Array.from({length: 80}, () => ({
+    x: Math.random() * c.width,
+    y: -20 - Math.random() * 80,
+    r: 3 + Math.random() * 4,
+    v: 3 + Math.random() * 5,
+    col: ["#c41f1f", "#1c2430", "#f4e37a", "#fff", "#3d6f9c"][Math.floor(Math.random()*5)],
+    a: Math.random() * 6
+  }));
+  let t = 0;
+  (function frame() {
+    ctx.clearRect(0,0,c.width,c.height);
+    bits.forEach(b => {
+      b.y += b.v; b.x += Math.sin(b.a + t/8);
+      ctx.fillStyle = b.col;
+      ctx.fillRect(b.x, b.y, b.r, b.r * 1.4);
+    });
+    t += 1;
+    if (t < 90) requestAnimationFrame(frame);
+    else ctx.clearRect(0,0,c.width,c.height);
+  })();
+}
+
+function render() {
+  const db = load();
+  const today = todayKey();
+  if (!db[today]) db[today] = { tread: false, reg: false, extra: [] };
+  if (!db[today].extra) db[today].extra = [];
+  save(db);
+  const day = db[today];
+  const p = nowParts();
+
+  document.getElementById("todayTitle").textContent = fmt.format(new Date());
+  const s = streak(db, today);
+  document.getElementById("streak").textContent = s ? (s + " day streak") : "no streak yet";
+
+  const night = windDown();
+  const need = [];
+  if (isTreadDayKey(today) && !day.tread && !night) need.push("treadmill");
+  if (isRegDay(today) && !day.reg && !night) need.push("20 MCQs");
+  document.getElementById("needLine").textContent = need.length
+    ? ("still open: " + need.join(" + "))
+    : (night ? "nothing tonight" : "nothing left on the pad");
+
+  const weekEl = document.getElementById("week");
+  weekEl.innerHTML = "";
+  const start = addDays(today, -p.dow);
+  for (let i = 0; i < 7; i++) {
+    const k = addDays(start, i);
+    const d = document.createElement("div");
+    const done = complete(db[k], k);
+    const future = k > today;
+    const past = k < today;
+    d.className = "wd" + (k === today ? " today" : "") + (done ? " done" : "") + (past && !done ? " miss" : "");
+    const mark = done ? "X" : (future ? "" : (k === today ? dayNumFmt.format(dateFromKey(k)) : "·"));
+    d.innerHTML = "<span>" + dowFmt.format(dateFromKey(k)) + "</span><b>" + mark + "</b>";
+    weekEl.appendChild(d);
+  }
+
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  function row(id, title, hint, on, locked) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "item" + (on ? " on" : "") + (locked ? " off-day" : "");
+    btn.innerHTML = '<span class="box"><span class="x">X</span></span><span class="copy"><span class="name"></span><small class="hint"></small></span>';
+    btn.querySelector(".name").textContent = title;
+    btn.querySelector(".hint").textContent = hint;
+    if (!locked) {
+      btn.addEventListener("click", () => {
+        const db2 = load();
+        if (!db2[today]) db2[today] = { tread: false, reg: false, extra: [] };
+        if (id === "tread") db2[today].tread = !db2[today].tread;
+        else if (id === "reg") db2[today].reg = !db2[today].reg;
+        else {
+          const i = +id.split("-")[1];
+          db2[today].extra[i].on = !db2[today].extra[i].on;
+        }
+        save(db2);
+        const nowOn = id === "tread" ? db2[today].tread : id === "reg" ? db2[today].reg : db2[today].extra[+id.split("-")[1]].on;
+        if (nowOn) tick();
+        const wasDone = complete(day, today);
+        render();
+        const nowDone = complete(load()[today], today);
+        if (nowOn && nowDone && !wasDone) burst();
+      });
+    }
+    list.appendChild(btn);
+  }
+
+  if (!isTreadDayKey(today)) row("tread", "Treadmill — starts tomorrow", "First one is Monday 5:30. Not tonight.", false, true);
+  else if (night && !day.tread) row("tread", "Treadmill — not tonight", "Window closed. Next one is 5:30. Go to bed.", false, true);
+  else row("tread", "Treadmill", "20 minutes counts. Shoes on at 5:30.", !!day.tread, false);
+  if (isRegDay(today) && !(night && !day.reg)) row("reg", "REG — 20 MCQs", "Before the inbox, or at 4:30 before YouTube. Score screen only.", !!day.reg, false);
+  else if (isRegDay(today) && night && !day.reg) row("reg", "REG — not tonight", "Window closed. Next set is a study day. Go to bed.", false, true);
+  else row("reg", "REG — off day", "Mon / Wed / Thu only. Enjoy the empty line.", false, true);
+  (day.extra || []).forEach((ex, i) => {
+    row("extra-" + i, ex.name, "Your line.", !!ex.on, false);
+  });
+
+  const toast = document.getElementById("toast");
+  if (complete(day, today)) toast.textContent = "Day is yours.";
+  else if (night) toast.textContent = "Go to bed. First X is 5:30 tomorrow.";
+  else if (day.tread && isRegDay(today) && !day.reg) toast.textContent = "Sweat counted. MCQs still open.";
+  else if (day.reg && isTreadDayKey(today) && !day.tread) toast.textContent = "Score screen. Treadmill still open.";
+  else toast.textContent = "";
+
+  const log = document.getElementById("log");
+  log.innerHTML = "";
+  const keys = Object.keys(db).sort().reverse();
+  let shown = 0;
+  keys.forEach(k => {
+    const d = db[k];
+    const bits = [];
+    if (d.tread) bits.push("treadmill");
+    if (d.reg) bits.push("20 MCQs");
+    (d.extra || []).forEach(ex => { if (ex.on) bits.push(ex.name); });
+    if (!bits.length) return;
+    const li = document.createElement("li");
+    const label = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(dateFromKey(k));
+    li.textContent = label + "  " + bits.join("  ·  ");
+    log.appendChild(li);
+    shown += 1;
+  });
+  if (!shown) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.style.textDecoration = "none";
+    li.textContent = "Nothing crossed off yet. That changes the first time you tap a box.";
+    log.appendChild(li);
+  }
+}
+
+document.getElementById("addForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("addInput");
+  const name = input.value.trim();
+  if (!name) return;
+  const db = load();
+  const today = todayKey();
+  if (!db[today]) db[today] = { tread: false, reg: false, extra: [] };
+  if (!db[today].extra) db[today].extra = [];
+  db[today].extra.push({ name, on: false });
+  save(db);
+  input.value = "";
+  render();
+});
+
+pull().then(function(){ render(); });
+</script>
+</body>
+</html>
