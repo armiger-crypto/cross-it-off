@@ -195,6 +195,10 @@
     <button type="submit">Add</button>
   </form>
   <div class="toast" id="toast"></div>
+  <p class="foot" style="margin:10px 0 0;text-align:left">
+    <button type="button" id="syncBtn" style="border:2px solid #1c2430;background:transparent;border-radius:999px;padding:6px 12px;font:inherit;font-weight:700;cursor:pointer">Enable two-way sync</button>
+    <span id="syncState" style="margin-left:8px;color:#5c6570;font-size:13px"></span>
+  </p>
   <div class="log">
     <h2>Already crossed off</h2>
     <ul id="log"></ul>
@@ -249,26 +253,58 @@ function load() {
   catch { return {}; }
 }
 function save(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
-async function pull() {
+
+function padToken(){
+  return (window.PAD_GH_TOKEN || localStorage.getItem("pad-gh-token") || "").trim();
+}
+function mergePad(a, b){
+  const out = Object.assign({}, a||{});
+  const src = b||{};
+  for (const k of Object.keys(src)){
+    const av = out[k] || {};
+    const bv = src[k] || {};
+    const au = av.updated||0, bu = bv.updated||0;
+    out[k] = (bu >= au) ? bv : av;
+  }
+  return out;
+}
+async function pull(){
   try {
-    const r = await fetch("https://raw.githubusercontent.com/"+REPO+"/main/pad.json?t="+Date.now());
+    const r = await fetch("https://raw.githubusercontent.com/armiger-crypto/cross-it-off/main/pad.json?t="+Date.now());
     if (!r.ok) return load();
     const data = await r.json();
-    if (data && typeof data === "object") {
-      const local = load();
-      const merged = Object.assign({}, data, local);
-      for (const k of Object.keys(data)) {
-        merged[k] = Object.assign({}, data[k]||{}, local[k]||{});
-        if ((data[k]||{}).extra || (local[k]||{}).extra) {
-          merged[k].extra = (local[k]&&local[k].extra&&local[k].extra.length) ? local[k].extra : (data[k].extra||[]);
-        }
-      }
+    if (data && typeof data === "object"){
+      const merged = mergePad(data, load());
       localStorage.setItem(KEY, JSON.stringify(merged));
       return merged;
     }
-  } catch (e) {}
+  } catch(e) {}
   return load();
 }
+async function push(db){
+  const token = padToken();
+  if (!token) return false;
+  try {
+    const meta = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {
+      headers: {Authorization:"Bearer "+token, Accept:"application/vnd.github+json"}
+    });
+    if (!meta.ok) return false;
+    const j = await meta.json();
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(db))));
+    const res = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {
+      method:"PUT",
+      headers: {Authorization:"Bearer "+token, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
+      body: JSON.stringify({message:"pad", content:content, sha:j.sha})
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+function touch(db, key){
+  if (!db[key]) db[key] = {tread:false, reg:false, extra:[]};
+  db[key].updated = Date.now();
+  return db;
+}
+
 
 function isRegDay(key) {
   const dt = dateFromKey(key);
@@ -402,7 +438,7 @@ function render() {
           const i = +id.split("-")[1];
           db2[today].extra[i].on = !db2[today].extra[i].on;
         }
-        save(db2);
+        touch(db2, today); save(db2); push(db2);
         const nowOn = id === "tread" ? db2[today].tread : id === "reg" ? db2[today].reg : db2[today].extra[+id.split("-")[1]].on;
         if (nowOn) tick();
         const wasDone = complete(day, today);
@@ -472,7 +508,43 @@ document.getElementById("addForm").addEventListener("submit", (e) => {
   render();
 });
 
+function syncLabel(){
+  const el = document.getElementById("syncState");
+  if (el) el.textContent = padToken() ? "this phone writes back to the PC" : "this phone can read the PC, not write yet";
+}
+document.getElementById("syncBtn").onclick = function(){
+  const cur = padToken();
+  const v = prompt("Paste the personal GitHub token (armiger-crypto) to let this phone write back.", cur || "");
+  if (v) { localStorage.setItem("pad-gh-token", v.trim()); }
+  syncLabel();
+};
+syncLabel();
 pull().then(function(){ render(); });
+setInterval(function(){ if (!document.hidden) function syncLabel(){
+  const el = document.getElementById("syncState");
+  if (el) el.textContent = padToken() ? "this phone writes back to the PC" : "this phone can read the PC, not write yet";
+}
+document.getElementById("syncBtn").onclick = function(){
+  const cur = padToken();
+  const v = prompt("Paste the personal GitHub token (armiger-crypto) to let this phone write back.", cur || "");
+  if (v) { localStorage.setItem("pad-gh-token", v.trim()); }
+  syncLabel();
+};
+syncLabel();
+pull().then(function(){ render(); }); }, 15000);
+document.addEventListener("visibilitychange", function(){ if (!document.hidden) function syncLabel(){
+  const el = document.getElementById("syncState");
+  if (el) el.textContent = padToken() ? "this phone writes back to the PC" : "this phone can read the PC, not write yet";
+}
+document.getElementById("syncBtn").onclick = function(){
+  const cur = padToken();
+  const v = prompt("Paste the personal GitHub token (armiger-crypto) to let this phone write back.", cur || "");
+  if (v) { localStorage.setItem("pad-gh-token", v.trim()); }
+  syncLabel();
+};
+syncLabel();
+pull().then(function(){ render(); }); });
+
 </script>
 </body>
 </html>
