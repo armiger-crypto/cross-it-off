@@ -258,27 +258,48 @@ function save(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
 function padToken(){
   return (window.PAD_GH_TOKEN || localStorage.getItem("pad-gh-token") || "").trim();
 }
+function mergeDay(a, b){
+  a = a || {}; b = b || {};
+  const seen = {};
+  const extras = [];
+  function add(list){
+    (list||[]).forEach(function(ex){
+      if (!ex || !ex.name) return;
+      if (!seen[ex.name]) { seen[ex.name] = {name:ex.name, on:!!ex.on}; extras.push(seen[ex.name]); }
+      else if (ex.on) seen[ex.name].on = true;
+    });
+  }
+  add(a.extra); add(b.extra);
+  return {
+    tread: !!(a.tread || b.tread),
+    reg: !!(a.reg || b.reg),
+    extra: extras,
+    updated: Math.max(a.updated||0, b.updated||0)
+  };
+}
 function mergePad(a, b){
   const out = Object.assign({}, a||{});
   const src = b||{};
-  for (const k of Object.keys(src)){
-    const av = out[k] || {};
-    const bv = src[k] || {};
-    const au = av.updated||0, bu = bv.updated||0;
-    out[k] = (bu >= au) ? bv : av;
-  }
+  Object.keys(src).concat(Object.keys(out)).forEach(function(k){ out[k] = mergeDay(out[k], src[k]); });
   return out;
+}
+function padHeaders(extra){
+  const h = Object.assign({Accept:"application/vnd.github+json", "Cache-Control":"no-cache"}, extra||{});
+  const t = padToken();
+  if (t) h.Authorization = "Bearer "+t;
+  return h;
+}
+function decodePad(j){
+  return JSON.parse(decodeURIComponent(escape(atob((j.content||"").replace(/\\n/g,"")))));
 }
 async function pull(){
   try {
-    const r = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json?t="+Date.now(), {
-      headers: {Accept:"application/vnd.github.raw", "Cache-Control":"no-cache"}
-    });
+    const r = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json?t="+Date.now(), {headers: padHeaders()});
     if (!r.ok) return load();
-    const data = await r.json();
+    const data = decodePad(await r.json());
     if (data && typeof data === "object"){
-      const merged = mergePad(data, load());
-      localStorage.setItem(KEY, JSON.stringify(merged));
+      const merged = mergePad(load(), data);
+      save(merged);
       return merged;
     }
   } catch(e) {}
@@ -372,7 +393,6 @@ function render() {
   const today = todayKey();
   if (!db[today]) db[today] = { tread: false, reg: false, extra: [] };
   if (!db[today].extra) db[today].extra = [];
-  save(db);
   const day = db[today];
   const p = nowParts();
 
@@ -508,10 +528,9 @@ document.getElementById("syncForm").addEventListener("submit", async (e) => {
   if (!v) return;
   localStorage.setItem("pad-gh-token", v);
   document.getElementById("syncInput").value = "";
-  const db = load();
-  const today = todayKey();
-  touch(db, today); save(db);
+  const db = await pull();
   const ok = await push(db);
+  render();
   syncLabel(ok);
 });
 
@@ -519,15 +538,17 @@ async function push(db){
   const token = padToken();
   if (!token) { syncLabel(); return false; }
   try {
-    const meta = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {
-      headers: {Authorization:"Bearer "+token, Accept:"application/vnd.github+json"}
-    });
+    const meta = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {headers: padHeaders()});
     if (!meta.ok) { syncLabel(false); return false; }
     const j = await meta.json();
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(db))));
+    let remote = {};
+    try { remote = decodePad(j); } catch(e) {}
+    const merged = mergePad(remote, db);
+    save(merged);
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(merged))));
     const res = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {
       method:"PUT",
-      headers: {Authorization:"Bearer "+token, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
+      headers: padHeaders({"Content-Type":"application/json"}),
       body: JSON.stringify({message:"pad", content:content, sha:j.sha})
     });
     const ok = res.ok;
