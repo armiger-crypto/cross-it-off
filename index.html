@@ -140,13 +140,14 @@
   .add {
     display: flex; gap: 8px; margin-top: 8px; padding-top: 6px;
   }
-  .add input {
+  .add input, .add textarea {
     flex: 1; border: 0; background: transparent;
     border-bottom: 2px solid rgba(28,36,48,.25);
     font: inherit; font-size: 16px; padding: 8px 2px;
     color: var(--ink);
   }
-  .add input:focus { outline: none; border-bottom-color: var(--ink); }
+  .add textarea { min-height: 52px; resize: vertical; }
+  .add input:focus, .add textarea:focus { outline: none; border-bottom-color: var(--ink); }
   .add button {
     border: 2px solid var(--ink); background: transparent;
     border-radius: 999px; padding: 6px 12px; font: inherit;
@@ -196,7 +197,7 @@
   </form>
   <div class="toast" id="toast"></div>
   <form class="add" id="syncForm">
-    <input id="syncInput" type="password" autocomplete="off" placeholder="Paste personal GitHub token to write back" />
+    <textarea id="syncInput" rows="2" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Paste personal GitHub token (ghp_…), not the work one"></textarea>
     <button type="submit">Sync</button>
   </form>
   <p id="syncState" class="hint" style="margin:6px 0 0"></p>
@@ -255,8 +256,12 @@ function load() {
 }
 function save(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
 
+function cleanToken(v){
+  v = (v || "").replace(/Bearer/gi,"").replace(/\s+/g,"").trim();
+  return v;
+}
 function padToken(){
-  return (window.PAD_GH_TOKEN || localStorage.getItem("pad-gh-token") || "").trim();
+  return cleanToken(window.PAD_GH_TOKEN || localStorage.getItem("pad-gh-token") || "");
 }
 function mergeDay(a, b){
   a = a || {}; b = b || {};
@@ -513,25 +518,51 @@ document.getElementById("addForm").addEventListener("submit", (e) => {
   render();
 });
 
-function syncLabel(ok){
+function syncLabel(ok, detail){
   const el = document.getElementById("syncState");
   if (!el) return;
-  if (!padToken()) el.textContent = "Phone is read-only until you paste the token below and tap Sync.";
-  else if (ok === false) el.textContent = "Token saved but write failed. Check it is the armiger-crypto token.";
+  if (detail) { el.textContent = detail; return; }
+  if (!padToken()) el.textContent = "Phone is read-only until you paste the personal GitHub token and tap Sync.";
+  else if (ok === false) el.textContent = "Token saved but write failed.";
   else if (ok === true) el.textContent = "Two-way is on. Checks on this phone go to the PC.";
   else el.textContent = "Token is on this phone. Cross something off to send it.";
+}
+async function githubErr(r){
+  try { const j = await r.json(); return j.message || ("GitHub "+r.status); }
+  catch(e) { return "GitHub "+r.status; }
+}
+async function checkToken(token){
+  const r = await fetch("https://api.github.com/user", {
+    headers: {Authorization:"Bearer "+token, Accept:"application/vnd.github+json"}
+  });
+  if (!r.ok) return {ok:false, msg: await githubErr(r)};
+  const u = await r.json();
+  if (u.login !== "armiger-crypto") {
+    return {ok:false, msg:"That token is "+u.login+". Need the personal one (armiger-crypto), not work."};
+  }
+  return {ok:true, login:u.login};
 }
 
 document.getElementById("syncForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const v = document.getElementById("syncInput").value.trim();
-  if (!v) return;
+  const raw = document.getElementById("syncInput").value;
+  const v = cleanToken(raw);
+  if (!v) { syncLabel(false, "Nothing pasted."); return; }
+  if (!(v.startsWith("ghp_") || v.startsWith("github_pat_"))) {
+    syncLabel(false, "That does not look like a GitHub token. It should start with ghp_");
+    return;
+  }
+  syncLabel(false, "Checking token…");
+  let chk;
+  try { chk = await checkToken(v); }
+  catch(err) { syncLabel(false, "Phone could not reach GitHub. Try Safari, not an in-app browser."); return; }
+  if (!chk.ok) { syncLabel(false, chk.msg); return; }
   localStorage.setItem("pad-gh-token", v);
   document.getElementById("syncInput").value = "";
   const db = await pull();
   const ok = await push(db);
   render();
-  syncLabel(ok);
+  if (ok) syncLabel(true, "Two-way is on as "+chk.login+".");
 });
 
 async function push(db){
@@ -539,7 +570,7 @@ async function push(db){
   if (!token) { syncLabel(); return false; }
   try {
     const meta = await fetch("https://api.github.com/repos/armiger-crypto/cross-it-off/contents/pad.json", {headers: padHeaders()});
-    if (!meta.ok) { syncLabel(false); return false; }
+    if (!meta.ok) { syncLabel(false, await githubErr(meta)); return false; }
     const j = await meta.json();
     let remote = {};
     try { remote = decodePad(j); } catch(e) {}
@@ -551,10 +582,10 @@ async function push(db){
       headers: padHeaders({"Content-Type":"application/json"}),
       body: JSON.stringify({message:"pad", content:content, sha:j.sha})
     });
-    const ok = res.ok;
-    syncLabel(ok);
-    return ok;
-  } catch(e) { syncLabel(false); return false; }
+    if (!res.ok) { syncLabel(false, await githubErr(res)); return false; }
+    syncLabel(true);
+    return true;
+  } catch(e) { syncLabel(false, "Write failed: "+(e.message||e)); return false; }
 }
 
 syncLabel();
