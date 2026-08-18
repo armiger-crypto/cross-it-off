@@ -289,9 +289,9 @@ function mergePad(a, b){
   return out;
 }
 function padHeaders(extra){
-  const h = Object.assign({Accept:"application/vnd.github+json", "Cache-Control":"no-cache"}, extra||{});
-  const t = padToken();
-  if (t) h.Authorization = "Bearer "+t;
+  const h = Object.assign({Accept:"application/vnd.github+json"}, extra||{});
+  const tok = padToken();
+  if (tok) h.Authorization = "Bearer "+tok;
   return h;
 }
 function decodePad(j){
